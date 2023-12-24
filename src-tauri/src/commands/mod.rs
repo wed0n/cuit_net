@@ -1,16 +1,13 @@
+mod com_util;
+use com_util::ComUtil;
 use windows::{
     core::{BSTR, GUID},
     Win32::System::{
-        Com::{
-            CoCreateInstance, CoInitializeEx, CoInitializeSecurity, CoUninitialize,
-            CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, EOLE_AUTHENTICATION_CAPABILITIES,
-            RPC_C_AUTHN_LEVEL_PKT_PRIVACY, RPC_C_IMP_LEVEL_IMPERSONATE,
-        },
+        Com::{CoCreateInstance, CLSCTX_INPROC_SERVER},
         TaskScheduler::{ITaskService, TASK_CREATE_OR_UPDATE, TASK_LOGON_NONE},
         Variant::VARIANT,
     },
 };
-
 struct LoginUser {
     username: String,
     password: String,
@@ -70,31 +67,14 @@ fn generate_task_xml(path: &str, login_user: &LoginUser) -> String {
     )
 }
 
-fn create_task(login_user: &LoginUser) -> Result<(), &'static str> {
+fn create_task_impl(login_user: &LoginUser) -> Result<(), &'static str> {
     unsafe {
-        CoInitializeEx(None, COINIT_MULTITHREADED).or(Err("初始化COM失败"))?;
-        CoInitializeSecurity(
-            None,
-            -1,
-            None,
-            None,
-            RPC_C_AUTHN_LEVEL_PKT_PRIVACY,
-            RPC_C_IMP_LEVEL_IMPERSONATE,
-            None,
-            EOLE_AUTHENTICATION_CAPABILITIES(0),
-            None,
-        )
-        .map_err(|_| {
-            CoUninitialize();
-            "初始化COM安全策略失败"
-        })?;
+        let _ = ComUtil::new()?;
         //参考 https://github.com/microsoft/windows-rs/issues/1946#issuecomment-1436749818
         const CLSID_TASK_SERVICE: GUID = GUID::from_u128(0x0f87369f_a4e5_4cfc_bd3e_73e6154572dd);
         let service: ITaskService =
-            CoCreateInstance(&CLSID_TASK_SERVICE, None, CLSCTX_INPROC_SERVER).map_err(|_| {
-                CoUninitialize();
-                "创建ITaskService实例失败"
-            })?;
+            CoCreateInstance(&CLSID_TASK_SERVICE, None, CLSCTX_INPROC_SERVER)
+                .or(Err("创建ITaskService实例失败"))?;
         service
             .Connect(
                 VARIANT::default(),
@@ -102,22 +82,15 @@ fn create_task(login_user: &LoginUser) -> Result<(), &'static str> {
                 VARIANT::default(),
                 VARIANT::default(),
             )
-            .map_err(|_| {
-                CoUninitialize();
-                "连接ITaskService失败"
-            })?;
+            .or(Err("连接ITaskService失败"))?;
 
         let str_to_bstr = |str: &str| -> Result<BSTR, &'static str> {
             let root_folder_path: Vec<u16> = String::from(str).encode_utf16().collect();
-            BSTR::from_wide(root_folder_path.as_slice()).map_err(|_| {
-                CoUninitialize();
-                "创建BSTR失败"
-            })
+            BSTR::from_wide(root_folder_path.as_slice()).or(Err("创建BSTR失败"))
         };
-        let root_folder = service.GetFolder(&str_to_bstr("\\")?).map_err(|_| {
-            CoUninitialize();
-            "获取Folder失败"
-        })?;
+        let root_folder = service
+            .GetFolder(&str_to_bstr("\\")?)
+            .or(Err("获取Folder失败"))?;
 
         root_folder
             .RegisterTask(
@@ -129,10 +102,22 @@ fn create_task(login_user: &LoginUser) -> Result<(), &'static str> {
                 TASK_LOGON_NONE,
                 VARIANT::default(),
             )
-            .map_err(|_| {
-                CoUninitialize();
-                "注册计划任务失败"
-            })?;
+            .or(Err("注册计划任务失败"))?;
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn create_task(
+    username: String,
+    password: String,
+    login_type: i32,
+) -> Result<(), &'static str> {
+    let login_user = LoginUser {
+        username,
+        password,
+        login_type,
+    };
+    create_task_impl(&login_user)?;
     Ok(())
 }
