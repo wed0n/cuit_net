@@ -1,5 +1,5 @@
-mod com_util;
-use com_util::ComUtil;
+mod util;
+use util::ComUtil;
 use windows::{
     core::{BSTR, GUID},
     Win32::System::{
@@ -8,10 +8,12 @@ use windows::{
         Variant::VARIANT,
     },
 };
-struct LoginUser {
-    username: String,
-    password: String,
-    login_type: i32,
+
+use self::util::escape_xml;
+pub struct LoginUser {
+    pub username: String,
+    pub password: String,
+    pub login_type: i32,
 }
 
 fn generate_task_xml(path: &str, login_user: &LoginUser) -> String {
@@ -70,6 +72,7 @@ fn generate_task_xml(path: &str, login_user: &LoginUser) -> String {
 fn create_task_impl(login_user: &LoginUser) -> Result<(), &'static str> {
     unsafe {
         let _ = ComUtil::new()?;
+
         //参考 https://github.com/microsoft/windows-rs/issues/1946#issuecomment-1436749818
         const CLSID_TASK_SERVICE: GUID = GUID::from_u128(0x0f87369f_a4e5_4cfc_bd3e_73e6154572dd);
         let service: ITaskService =
@@ -88,10 +91,10 @@ fn create_task_impl(login_user: &LoginUser) -> Result<(), &'static str> {
             let root_folder_path: Vec<u16> = String::from(str).encode_utf16().collect();
             BSTR::from_wide(root_folder_path.as_slice()).or(Err("创建BSTR失败"))
         };
+
         let root_folder = service
             .GetFolder(&str_to_bstr("\\")?)
             .or(Err("获取Folder失败"))?;
-
         root_folder
             .RegisterTask(
                 None,
@@ -114,8 +117,8 @@ pub async fn create_task(
     login_type: i32,
 ) -> Result<(), &'static str> {
     let login_user = LoginUser {
-        username,
-        password,
+        username: escape_xml(&username)?,
+        password: escape_xml(&password)?,
         login_type,
     };
     create_task_impl(&login_user)?;
