@@ -4,7 +4,6 @@ import {
   Dropdown,
   FluentProvider,
   Input,
-  InputOnChangeData,
   Label,
   Option,
   webDarkTheme,
@@ -22,13 +21,6 @@ export default function App() {
   const [visable, setVisable] = useState(false)
   const loginType = useRef(-1)
 
-  const onChange = (
-    set: React.Dispatch<React.SetStateAction<string>>,
-    _event: React.ChangeEvent<HTMLInputElement>,
-    data: InputOnChangeData
-  ) => {
-    set(data.value)
-  }
   const onBlur = (
     current: string,
     set: React.Dispatch<React.SetStateAction<string>>,
@@ -129,7 +121,9 @@ export default function App() {
                 value={account}
                 size="medium"
                 style={{ marginLeft: 8, width: 160 }}
-                onChange={onChange.bind(null, setAccount)}
+                onChange={(_event, data) => {
+                  setAccount(data.value)
+                }}
                 onBlur={onBlur.bind(null, account, setAccount, lastAccount)}
                 pattern="\d"
               />
@@ -142,7 +136,11 @@ export default function App() {
                 size="medium"
                 style={{ marginLeft: 8, width: 160 }}
                 maxLength={20}
-                onChange={onChange.bind(null, setPassword)}
+                onChange={(_event, data) => {
+                  if (!/\s/.test(data.value)) {
+                    setPassword(data.value)
+                  }
+                }}
                 contentAfter={
                   <Button
                     appearance="transparent"
