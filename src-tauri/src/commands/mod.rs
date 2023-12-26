@@ -1,13 +1,14 @@
 mod util;
-use util::ComUtil;
 use windows::{
-    core::{BSTR, GUID},
+    core::GUID,
     Win32::System::{
         Com::{CoCreateInstance, CLSCTX_INPROC_SERVER},
-        TaskScheduler::{ITaskService, TASK_CREATE_OR_UPDATE, TASK_LOGON_NONE},
+        TaskScheduler::{ITaskFolder, ITaskService, TASK_CREATE_OR_UPDATE, TASK_LOGON_NONE},
         Variant::VARIANT,
     },
 };
+
+use util::str_to_bstr;
 
 use self::util::escape_xml;
 pub struct LoginUser {
@@ -69,45 +70,24 @@ fn generate_task_xml(path: &str, login_user: &LoginUser) -> String {
     )
 }
 
-fn create_task_impl(login_user: &LoginUser) -> Result<(), &'static str> {
-    unsafe {
-        let _ = ComUtil::new()?;
+unsafe fn get_root_folder() -> Result<ITaskFolder, &'static str> {
+    //参考 https://github.com/microsoft/windows-rs/issues/1946#issuecomment-1436749818
+    const CLSID_TASK_SERVICE: GUID = GUID::from_u128(0x0f87369f_a4e5_4cfc_bd3e_73e6154572dd);
+    let service: ITaskService = CoCreateInstance(&CLSID_TASK_SERVICE, None, CLSCTX_INPROC_SERVER)
+        .or(Err("创建ITaskService实例失败"))?;
+    service
+        .Connect(
+            VARIANT::default(),
+            VARIANT::default(),
+            VARIANT::default(),
+            VARIANT::default(),
+        )
+        .or(Err("连接ITaskService失败"))?;
 
-        //参考 https://github.com/microsoft/windows-rs/issues/1946#issuecomment-1436749818
-        const CLSID_TASK_SERVICE: GUID = GUID::from_u128(0x0f87369f_a4e5_4cfc_bd3e_73e6154572dd);
-        let service: ITaskService =
-            CoCreateInstance(&CLSID_TASK_SERVICE, None, CLSCTX_INPROC_SERVER)
-                .or(Err("创建ITaskService实例失败"))?;
-        service
-            .Connect(
-                VARIANT::default(),
-                VARIANT::default(),
-                VARIANT::default(),
-                VARIANT::default(),
-            )
-            .or(Err("连接ITaskService失败"))?;
-
-        let str_to_bstr = |str: &str| -> Result<BSTR, &'static str> {
-            let root_folder_path: Vec<u16> = String::from(str).encode_utf16().collect();
-            BSTR::from_wide(root_folder_path.as_slice()).or(Err("创建BSTR失败"))
-        };
-
-        let root_folder = service
-            .GetFolder(&str_to_bstr("\\")?)
-            .or(Err("获取Folder失败"))?;
-        root_folder
-            .RegisterTask(
-                None,
-                &str_to_bstr(&generate_task_xml("wdnmd", login_user))?,
-                TASK_CREATE_OR_UPDATE.0,
-                VARIANT::default(),
-                VARIANT::default(),
-                TASK_LOGON_NONE,
-                VARIANT::default(),
-            )
-            .or(Err("注册计划任务失败"))?;
-    }
-    Ok(())
+    let root_folder = service
+        .GetFolder(&str_to_bstr("\\")?)
+        .or(Err("获取Folder失败"))?;
+    Ok(root_folder)
 }
 
 #[tauri::command]
@@ -121,6 +101,33 @@ pub async fn create_task(
         password: escape_xml(&password)?,
         login_type,
     };
-    create_task_impl(&login_user)?;
+    unsafe {
+        let root_folder = get_root_folder()?;
+        root_folder
+            .RegisterTask(
+                None,
+                &str_to_bstr(&generate_task_xml(
+                    std::env::current_exe().unwrap().to_str().unwrap(),
+                    &login_user,
+                ))?,
+                TASK_CREATE_OR_UPDATE.0,
+                VARIANT::default(),
+                VARIANT::default(),
+                TASK_LOGON_NONE,
+                VARIANT::default(),
+            )
+            .or(Err("注册计划任务失败"))?;
+    }
     Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_task() -> Result<(), &'static str> {
+    unsafe {
+        let root_folder = get_root_folder()?;
+        root_folder
+            .DeleteTask(&str_to_bstr("cuit_net")?, 0)
+            .or(Err("删除计划任务失败"))?;
+        Ok(())
+    }
 }

@@ -1,40 +1,4 @@
-use windows::Win32::System::Com::{
-    CoInitializeEx, CoInitializeSecurity, CoUninitialize, COINIT_MULTITHREADED,
-    EOLE_AUTHENTICATION_CAPABILITIES, RPC_C_AUTHN_LEVEL_PKT_PRIVACY, RPC_C_IMP_LEVEL_IMPERSONATE,
-};
-
-#[allow(dead_code)]
-pub struct ComUtil {
-    private: (), //禁止不经过new生成实例
-}
-
-impl ComUtil {
-    pub unsafe fn new() -> Result<Self, &'static str> {
-        CoInitializeEx(None, COINIT_MULTITHREADED).or(Err("初始化COM失败"))?;
-        CoInitializeSecurity(
-            None,
-            -1,
-            None,
-            None,
-            RPC_C_AUTHN_LEVEL_PKT_PRIVACY,
-            RPC_C_IMP_LEVEL_IMPERSONATE,
-            None,
-            EOLE_AUTHENTICATION_CAPABILITIES(0),
-            None,
-        )
-        .map_err(|_| {
-            CoUninitialize();
-            "初始化COM安全策略失败"
-        })?;
-        Ok(ComUtil { private: () })
-    }
-}
-
-impl Drop for ComUtil {
-    fn drop(&mut self) {
-        unsafe { CoUninitialize() }
-    }
-}
+use windows::core::BSTR;
 
 pub fn escape_xml(str: &str) -> Result<String, &'static str> {
     let bytes = str.as_bytes();
@@ -51,4 +15,9 @@ pub fn escape_xml(str: &str) -> Result<String, &'static str> {
         }
     }
     String::from_utf8(result).or(Err("转义XML失败"))
+}
+
+pub fn str_to_bstr(str: &str) -> Result<BSTR, &'static str> {
+    let tmp: Vec<u16> = String::from(str).encode_utf16().collect();
+    BSTR::from_wide(tmp.as_slice()).or(Err("创建BSTR失败"))
 }

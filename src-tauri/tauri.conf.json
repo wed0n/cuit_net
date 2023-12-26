@@ -3,7 +3,7 @@
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
     "devPath": "http://localhost:8090/",
-    "distDir": "../src",
+    "distDir": "../dist",
     "withGlobalTauri": true
   },
   "package": {
@@ -35,11 +35,14 @@
     },
     "windows": [
       {
+        "width": 400,
+        "height": 300,
+        "minWidth": 400,
+        "minHeight": 300,
+        "title": "CUIT校园网自动连接 By: Wed0n",
+        "center": true,
         "fullscreen": false,
-        "resizable": true,
-        "title": "cuit_net",
-        "width": 800,
-        "height": 600
+        "resizable": true
       }
     ]
   }

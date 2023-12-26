@@ -5,7 +5,7 @@ mod commands;
 mod verify;
 use std::env;
 
-use commands::{create_task, LoginUser};
+use commands::{create_task, LoginUser,delete_task};
 use verify::verify;
 
 #[tokio::main]
@@ -22,7 +22,7 @@ async fn main() {
     }
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![create_task])
+        .invoke_handler(tauri::generate_handler![create_task,delete_task])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
