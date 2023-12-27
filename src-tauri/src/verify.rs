@@ -11,11 +11,15 @@ pub async fn verify(login_user: &mut LoginUser) -> Result<(), &'static str> {
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
     let client = client_builder.build().unwrap();
 
-    let mut flag = false; //连接是否成功
+    let mut flag; //连接是否成功
     if login_user.login_type == 0 {
-        flag = telecom(&client, login_user).await?;
-    }
-    if !flag {
+        let tmp = normal(&client, login_user);
+        flag = if telecom(&client, login_user).await? {
+            true
+        } else {
+            tmp.await?
+        };
+    } else {
         flag = normal(&client, login_user).await?;
     }
     if !flag {
@@ -25,7 +29,7 @@ pub async fn verify(login_user: &mut LoginUser) -> Result<(), &'static str> {
     if flag {
         Ok(())
     } else {
-        Err("验证校园网失败")
+        Err("登录校园网失败")
     }
 }
 
